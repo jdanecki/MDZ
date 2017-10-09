@@ -112,7 +112,7 @@ bool setting_get_long(  const char* buf,   const char* name,
     setlocale(LC_NUMERIC, sysloc);
 
     if (r != 1)
-        return false;
+     return false;
 
     if (!min && !max)
         return true;

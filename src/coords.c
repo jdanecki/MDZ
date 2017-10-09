@@ -21,8 +21,7 @@ void mpfr_to_gmp(mpfr_t from, mpf_t to)
 static void coords_mpfr_clear(coords* c);
 
 
-
-#if MPFR_VERSION_MAJOR == 2 && MPFR_VERSION_MINOR < 4
+#if MPFR_VERSION_MAJOR < 2 || (MPFR_VERSION_MAJOR == 2 && MPFR_VERSION_MINOR < 4)
 int mpfr_div_d(mpfr_t rop, mpfr_t op1, double _op2, mpfr_rnd_t rnd)
 {
     int r;
@@ -124,10 +123,9 @@ coords* coords_cpy(coords* dest, const coords* src)
 }
 
 
-#ifdef DEBUG
-#if MPFR_VERSION_MAJOR == 2 && MPFR_VERSION_MINOR >= 4
 void coords_dump(const coords* c, const char* msg)
 {
+#if MPFR_VERSION_MAJOR > 2 || (MPFR_VERSION_MAJOR == 2 && MPFR_VERSION_MINOR >= 4)
     mpfr_printf("%s\nc->cx:%.Rf\tc->cy:%.Rf\tc->size:%.Rf\n",
                 msg, c->cx,  c->cy, c->width);
 
@@ -135,9 +133,8 @@ void coords_dump(const coords* c, const char* msg)
                 c->xmin,  c->xmax, c->ymax);
 
     printf("c->precision: %ld\n", (long)c->precision);
+#endif
 }
-#endif
-#endif
 
 
 void coords_free(coords* c)
@@ -159,6 +156,12 @@ int coords_calculate_precision(coords* c)
     mpfr_t bail;
     mpfr_t px_size;
     mpfr_t precision;
+
+    DMSG("Calculating recommended precision...\n");
+
+    #ifndef NDEBUG
+    coords_dump(c,"meh:");
+    #endif
 
     mpfr_init2(tmp,         c->precision);
     mpfr_init2(bail,        c->precision);
@@ -183,7 +186,7 @@ int coords_calculate_precision(coords* c)
     mpfr_clear(precision);
 
     mpfr_free_cache(); /* <-- keep valgrind happy over mpfr_log2 */
-
+    DMSG("Recommended precision: %ld\n", c->recommend);
     return c->recommend;
 }
 
@@ -254,7 +257,7 @@ void coords_set(coords* c, int img_width, int img_height)
 {
     c->img_width =  img_width;
     c->img_height = img_height;
-    c->aspect =     (double)img_width / img_height;
+    c->aspect = (double)img_width / img_height;
     c->size = (c->aspect > 1.0) ? &c->width : &c->height;
     mpfr_set(*c->size,  c->_size,  GMP_RNDN);
 }
@@ -269,7 +272,7 @@ void coords_center_to_rect(coords* c)
 
     if (c->aspect > 1.0)
     {
-        DMSG("wide image");
+        DMSG("wide image\n");
 
         mpfr_div_d( c->height,  c->width,   c->aspect,  GMP_RNDN);
 
@@ -283,7 +286,7 @@ void coords_center_to_rect(coords* c)
     }
     else
     {
-        DMSG("tall image");
+        DMSG("tall image\n");
 
         mpfr_mul_d( c->width,   c->height,  c->aspect,  GMP_RNDN);
 
@@ -344,7 +347,7 @@ void coords_zoom(coords* c, double multiplier)
     mpfr_set(   *c->size,   c->_size,               GMP_RNDN);
 
     if (c->aspect > 1.0)
-        mpfr_div_d(c->height,   c->width,   c->aspect,  GMP_RNDN);
+        mpfr_div_d(c->height,  c->width,    c->aspect,  GMP_RNDN);
     else
         mpfr_mul_d(c->width,   c->height,   c->aspect,  GMP_RNDN);
 

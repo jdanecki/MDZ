@@ -5,10 +5,12 @@
 #include "render_threads.h"
 #include "setting.h"
 #include "fractal.h"
+#include "my_png.h"
 
 #include <math.h>
 #include <string.h>
 #include <locale.h>
+#include <libgen.h>
 
 #define DEFAULT_DEPTH           300
 #define DEFAULT_BAIL            4
@@ -16,9 +18,14 @@
 
 
 static const char* file_header = "mdz fractal settings";
+static char* last_used_dir = 0;
+static char* last_used_filename = 0;
+static char* last_used_filename_path = 0;
 
 const char* coords_str[] =  { "cx", "xmin", 0 };
 const char* paloff_str =  "palette-offset";
+
+static void set_last_used(const char* path);
 
 image_info * image_info_create(int family, int fractal)
 {
@@ -71,7 +78,7 @@ image_info * image_info_create(int family, int fractal)
 
 void image_info_destroy(image_info* img)
 {
-    DMSG("freeing image_info data!");
+    DMSG("freeing image_info data!\n");
     mpfr_clear( img->xmin );
     mpfr_clear( img->xmax );
     mpfr_clear( img->ymax );
@@ -97,6 +104,7 @@ void image_info_destroy(image_info* img)
 
 void image_info_set(image_info* img, int w, int h, int aa_factor)
 {
+    DMSG("image_info_set\n");
     gboolean same_size;
 
     if ((img->user_width == w)
@@ -139,6 +147,8 @@ void image_info_set(image_info* img, int w, int h, int aa_factor)
 
 void image_info_switch_fractal(image_info* img, int real_px, int imag_py)
 {
+    DMSG("image_info_switch_fractal\n");
+
     if (img->family == FAMILY_JULIA)
     {
         img->family = FAMILY_MANDEL;
@@ -173,6 +183,8 @@ void image_info_switch_fractal(image_info* img, int real_px, int imag_py)
 
 void image_info_threads_change(image_info* img, int thread_count)
 {
+    DMSG("image_info_threads_change\n");
+
     img->thread_count = thread_count;
 
     if (!img->rth_ptr)
@@ -185,9 +197,9 @@ void image_info_threads_change(image_info* img, int thread_count)
         }
     }
 
-    DMSG("calling thread init...");
+    DMSG("calling thread init...\n");
     if (!rth_init((rthdata*)img->rth_ptr, img->thread_count,
-                                            img->draw_lines, img))
+                                          img->draw_lines,   img))
     {
         fprintf(stderr, "failed to initialize multi-threading data\n");
     }
@@ -215,6 +227,8 @@ void image_info_clear_image(image_info* img, bool raw, bool rgb)
 void image_info_set_multi_prec(image_info* img, bool use_multi_prec,
                                                 bool use_rounding)
 {
+    DMSG("image_info_set_multi_prec\n");
+
     rthdata* rth = (rthdata*)img->rth_ptr;
 
     if (!img->rth_ptr)
@@ -238,6 +252,8 @@ void image_info_set_multi_prec(image_info* img, bool use_multi_prec,
 
 void image_info_set_precision(image_info * img, mpfr_prec_t precision)
 {
+    DMSG("image_info_set_precision\n");
+
     if (img->precision == precision)
         return;
 
@@ -281,6 +297,8 @@ void image_info_reset_view(image_info* img)
     coords_reset(img->pcoords);
 
     img->ui_ref_center = TRUE;
+    image_info_reset_last_used_filename();
+    my_png_reset_last_used_filename();
 }
 
 int image_info_save_all(image_info * img, const char * filename)
@@ -299,6 +317,7 @@ int image_info_save_all(image_info * img, const char * filename)
         return 0;
     }
     fclose(fd);
+    set_last_used(filename);
     return 1;
 }
 
@@ -381,9 +400,21 @@ int image_info_save_settings(image_info * img, FILE* fd)
         mpfr_out_str(fd, 10, 0, img->u.julia.c_im, GMP_RNDN);
     }
 
+
+
     fprintf(fd, "\n");
 
     fprintf(fd, "palette-offset %d\n", pal_offset);
+
+    fprintf(fd, "r-strength %lf\n", img->rnd_pal->r_strength);
+    fprintf(fd, "r-bands %lf\n",    img->rnd_pal->r_bands);
+    fprintf(fd, "g-strength %lf\n", img->rnd_pal->g_strength);
+    fprintf(fd, "g-bands %lf\n",    img->rnd_pal->g_bands);
+    fprintf(fd, "b-strength %lf\n", img->rnd_pal->b_strength);
+    fprintf(fd, "b-bands %lf\n",    img->rnd_pal->b_bands);
+    fprintf(fd, "rnd-offset %d\n",  img->rnd_pal->offset);
+    fprintf(fd, "rnd-stripe %d\n",  img->rnd_pal->stripe);
+    fprintf(fd, "rnd-spread %d\n",  img->rnd_pal->spread);
 
     setlocale(LC_NUMERIC, loc);
 
@@ -440,6 +471,13 @@ int image_info_load_settings(image_info * img, mdzfile* mf)
     int coord_type = 0;
     int ret = 0;
     long paloff;
+
+    double rnd_rs, rnd_rb, rnd_gs, rnd_gb, rnd_bs, rnd_bb;
+    long rnd_offset, rnd_stripe, rnd_spread;
+    int rndpal = 0;
+
+
+    DMSG("image_info_load_settings\n");
 
     mpfr_t cx, cy, size, xmin, xmax, ymax, j_re, j_im;
 
@@ -574,7 +612,8 @@ int image_info_load_settings(image_info * img, mdzfile* mf)
 
     if ((mdzfile_test_for_name(mf, paloff_str)))
     {
-        if (!setting_get_long(mf->line, paloff_str, &paloff, 0, 255))
+        /*if (!setting_get_long(mf->line, paloff_str, &paloff, 0, 255)) */
+        if (!mdzfile_get_long(mf, paloff_str, &paloff, 0, 255))
         {
             mdzfile_err(mf, "Error in palette offset setting");
             goto fail;
@@ -584,6 +623,56 @@ int image_info_load_settings(image_info * img, mdzfile* mf)
     }
     else
         pal_offset = 0;
+
+    if ((mdzfile_test_for_name(mf, "r-strength")))
+    {
+        if (!mdzfile_get_double(mf, "r-strength", &rnd_rs, 0.0, 1.0))
+        {
+            mdzfile_err(mf, "Error in r-strength setting");
+            goto fail;
+        }
+        if (!mdzfile_get_double(mf, "r-bands", &rnd_rb, 0.0, 1.0))
+        {
+            mdzfile_err(mf, "Error in r-bands setting");
+            goto fail;
+        }
+        if (!mdzfile_get_double(mf, "g-strength", &rnd_gs, 0.0, 1.0))
+        {
+            mdzfile_err(mf, "Error in g-strength setting");
+            goto fail;
+        }
+        if (!mdzfile_get_double(mf, "g-bands", &rnd_gb, 0.0, 1.0))
+        {
+            mdzfile_err(mf, "Error in g-bands setting");
+            goto fail;
+        }
+        if (!mdzfile_get_double(mf, "b-strength", &rnd_bs, 0.0, 1.0))
+        {
+            mdzfile_err(mf, "Error in b-strength setting");
+            goto fail;
+        }
+        if (!mdzfile_get_double(mf, "b-bands", &rnd_bb, 0.0, 1.0))
+        {
+            mdzfile_err(mf, "Error in b-bands setting");
+            goto fail;
+        }
+        if (!mdzfile_get_long(mf, "rnd-offset", &rnd_offset, 0, 255))
+        {
+            mdzfile_err(mf, "Error in rnd-offset setting");
+            goto fail;
+        }
+        if (!mdzfile_get_long(mf, "rnd-stripe", &rnd_stripe, 0, 255))
+        {
+            mdzfile_err(mf, "Error in rnd-stripe setting");
+            goto fail;
+        }
+        if (!mdzfile_get_long(mf, "rnd-spread", &rnd_spread, 0, 255))
+        {
+            mdzfile_err(mf, "Error in rnd-spread setting");
+            goto fail;
+        }
+        rndpal = 1;
+    }
 
     if (!(w = img->user_width))
         w = DEFAULT_WIDTH;
@@ -597,9 +686,20 @@ int image_info_load_settings(image_info * img, mdzfile* mf)
     image_info_set_multi_prec(img, use_multi_prec, use_rounding);
     img->colour_scale = colsc;
     img->palette_ip =   colip;
-
     coords_set_precision(img->pcoords, precision);
     image_info_set_precision(img, precision);
+
+    if (rndpal) {
+        img->rnd_pal->r_strength = rnd_rs;
+        img->rnd_pal->g_strength = rnd_gs;
+        img->rnd_pal->b_strength = rnd_bs;
+        img->rnd_pal->r_bands = rnd_rb;
+        img->rnd_pal->g_bands = rnd_gb;
+        img->rnd_pal->b_bands = rnd_bb;
+        img->rnd_pal->offset = rnd_offset;
+        img->rnd_pal->stripe = rnd_stripe;
+        img->rnd_pal->spread = rnd_spread;
+    }
 
     if (img->ui_ref_center)
     {
@@ -609,6 +709,7 @@ int image_info_load_settings(image_info * img, mdzfile* mf)
     else
     {
         coords_set_rect(img->pcoords, xmin, xmax, ymax);
+        coords_calculate_precision(img->pcoords);
     }
 
     if (family == FAMILY_JULIA)
@@ -635,6 +736,7 @@ fail:
 
 int image_info_load_palette(mdzfile* mf)
 {
+    DMSG("image_info_load_palette\n");
     char* palfile = 0;
 
     if (!mdzfile_read(mf))
@@ -652,6 +754,7 @@ int image_info_load_palette(mdzfile* mf)
 
 int image_info_load_all(image_info * img, int sect_flags, const char * fn)
 {
+    DMSG("image_info_load_all\n");
     if (!fn)
         return 0;
 
@@ -693,6 +796,61 @@ int image_info_load_all(image_info * img, int sect_flags, const char * fn)
         }
     }
 
+    set_last_used(fn);
+
     mdzfile_close(mf);
     return 1;
+}
+
+
+static void set_last_used(const char* path)
+{
+    if (!path)
+        return;
+
+    if (last_used_dir && strcmp(last_used_dir, path) != 0) {
+        free(last_used_dir);
+        last_used_dir = 0;
+    }
+    if (!last_used_dir) {
+        last_used_dir = strdup(path);
+        last_used_dir = dirname(last_used_dir);
+    }
+    if (last_used_filename && strcmp(last_used_filename, path) != 0) {
+        free(last_used_filename);
+        last_used_filename = 0;
+    }
+    if (!last_used_filename) {
+        last_used_filename_path = strdup(path);
+        last_used_filename = basename(last_used_filename_path);
+    }
+}
+
+const char* image_info_get_last_used_dir(void)
+{
+    return last_used_dir;
+}
+
+const char* image_info_get_last_used_filename(void)
+{
+    return last_used_filename;
+}
+
+void image_info_reset_last_used_filename(void)
+{
+    if (last_used_filename_path) {
+        free(last_used_filename_path);
+        last_used_filename_path = 0;
+        last_used_filename = 0;
+    }
+}
+
+void image_info_cleanup(void)
+{
+    if (last_used_dir) {
+        free(last_used_dir);
+        last_used_dir = 0;
+    }
+
+    image_info_reset_last_used_filename();
 }

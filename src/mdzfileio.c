@@ -57,7 +57,6 @@ bool mdzfile_read(mdzfile* mf)
             free(mf->line);
 
         mf->line = buf_tidy(mf->buf);
-        DMSG(mf->line);
 
     } while (mf->line[0] == '#');
 
@@ -69,14 +68,19 @@ bool mdzfile_test_for_name(mdzfile* mf, const char* name)
 {
     size_t nlen = 0;
 
-    if (!mdzfile_read(mf)){printf("bloo!\n");
-        return false;}
+    if (!mdzfile_read(mf))
+    {
+        DMSG("What is the meaning of this!?\n");
+        return false;
+    }
 
     nlen = strlen(name);
     mf->test = strdup(mf->line);
 
     if (strlen(mf->line) < nlen + 2 || strncmp(name, mf->line, nlen))
+    {
         return false;
+    }
 
     return true;
 }
@@ -182,6 +186,10 @@ void mdzfile_close(mdzfile* mf)
 {
     fclose(mf->f);
     mf->write = false;
+    if (mf->name)
+        free(mf->name);
+    if (mf->line)
+        free(mf->line);
     free(mf);
 }
 
@@ -207,6 +215,7 @@ bool mdzfile_get_long(mdzfile* mf, const char* name,
 {
     if (!mdzfile_read(mf))
         return 0;
+
     return setting_get_long(mf->line, name, val, min, max);
 }
 

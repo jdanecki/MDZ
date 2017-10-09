@@ -56,7 +56,7 @@ static image_info_dialog*   img_info_dlg =  NULL;
 
 static gint idle_draw_callback(image_info* img);
 
-static void gui_stop_rendering(image_info* img);
+//static void gui_stop_rendering(image_info* img);
 static void start_julia_browsing(void);
 static void stop_julia_browsing(void);
 
@@ -410,9 +410,14 @@ static void do_reset_zoom(void)
 
     gtk_spin_button_set_value((GtkSpinButton*)depth_spin, img->depth);
     gtk_spin_button_set_value((GtkSpinButton*)bail_spin, img->bail);
+    gtk_check_menu_item_set_active(
+        GTK_CHECK_MENU_ITEM(zoom_new_win), img->zoom_new_win);
 
     if (img_info_dlg)
         image_info_dlg_set(img, img_info_dlg);
+
+    if (palgui)
+        palette_gui_update(palgui, img);
 
     gui_start_rendering(img);
 
@@ -432,24 +437,6 @@ void do_pal_edit_dialog(void)
     palette_gui_new(&palgui, img);
 }
 
-/*  commenting this out until I figure out what it's supposed to do
-
---  ie, what are these child processes? not the duplicate or
-    zoom-in-new-window windows - because they're not killed when
-    this is called - and anyway, i don't want them killed just because
-    i close the window which spawned them, so wtf!?!?
-
---  gfract in c heritage
-
-gint child_reaper(gpointer nothing)
-{
-    printf("in child_reaper\n");
-    // wait until all dead child processes are cleaned up
-    while (waitpid(-1, NULL, WNOHANG) > 0)
-        ;
-    return TRUE;
-}
-*/
 
 GtkWidget* menu_add(GtkWidget* menu, char* name, void (*func)(void))
 {
@@ -619,7 +606,7 @@ gint idle_draw_callback(image_info* img)
 
 void gui_start_rendering(image_info* img)
 {
-    DMSG("gui_start_rendering");
+    DMSG("gui_start_rendering\n");
 
     coords_get_rect(img->pcoords,   img->xmin, img->xmax,
                                     img->ymax, img->width);
@@ -667,8 +654,8 @@ void gui_start_rendering(image_info* img)
 
 void gui_stop_rendering(image_info* img)
 {
-    DMSG("gui_stop_rendering");
-    rth_ui_stop_render((rthdata*)img->rth_ptr);
+    DMSG("gui_stop_rendering\n");
+    rth_ui_stop_render_and_wait((rthdata*)img->rth_ptr);
 
     if (gui_idle_draw_id != -1)
     {

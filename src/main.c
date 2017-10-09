@@ -19,8 +19,10 @@ random_palette   rnd_palette;
 function_palette fun_palette;
 char*            program_name = 0;
 
+#define BUFSZ 1024
 
 void duplicate(void);
+int cpu_count(void);
 
 void init_misc(void)
 {
@@ -37,7 +39,7 @@ void init_misc(void)
         if (opts.aspect)
             opts.width = opts.height * opts.aspect;
         else
-            opts.width = img->user_height / img->aspect;
+            opts.width = opts.height * img->aspect;
     }
     else if (!opts.height)
     {
@@ -51,13 +53,14 @@ void init_misc(void)
         opts.antialias = 1;
 
     if (!opts.threads)
-        opts.threads = DEFAULT_THREAD_COUNT;
+    {
+        if (!(opts.threads = cpu_count()))
+            opts.threads = DEFAULT_THREAD_COUNT;
+    }
 
     img->thread_count = opts.threads;
 
     image_info_set(img, opts.width, opts.height, opts.antialias);
-
-    img->rnd_pal = &rnd_palette;
 
     fun_palette.offset = 0;
     fun_palette.stripe = 1;
@@ -93,7 +96,7 @@ int main(int argc, char** argv)
 
     img = image_info_create(FAMILY_MANDEL, MANDELBROT);
 
-    init_misc();
+    img->rnd_pal = &rnd_palette;
 
     if (opts.dumpfile)
     {
@@ -106,7 +109,7 @@ int main(int argc, char** argv)
             goto quit1;
         }
 
-        if (remove(opts.dumpfile) == -1)
+        if (0 && remove(opts.dumpfile) == -1)
         {
             perror("Can't delete temp file");
             /*  the code this is inherited from,
@@ -126,6 +129,8 @@ int main(int argc, char** argv)
             goto quit1;
         }
     }
+
+    init_misc();
 
     if (opts.palettefile)
     {
@@ -158,7 +163,9 @@ int main(int argc, char** argv)
 
 quit1:
     image_info_destroy(img);
+    image_info_cleanup();
     palette_free();
+    my_png_cleanup();
 
 quit2:
     cleanup_opts();
@@ -231,4 +238,36 @@ void duplicate(void)
         return;
     }
 
+}
+
+int cpu_count(void)
+{
+    FILE* f;
+    int cpu = 0;
+    char buf[BUFSZ];
+
+    if ((f = fopen("/proc/stat", "r")))
+    {
+        const char* id = buf + 3;
+        while (fgets(buf, BUFSZ, f) != NULL) {
+            if (strncmp(buf, "cpu", 3) == 0 && *id >= '0' && *id <= '9')
+                cpu++;
+        }
+        fclose(f);
+        if (cpu)
+            return cpu;
+    }
+
+    if ((f = fopen("/proc/cpuinfo", "r")))
+    {
+        while (fgets(buf, BUFSZ, f) != NULL) {
+            if (strncmp(buf, "processor", 9) == 0)
+                cpu++;
+        }
+        fclose(f);
+        if (cpu)
+            return cpu;
+    }
+
+    return 0;
 }

@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <mpfr.h>
 
+#include "debug.h"
 #include "my_mpfr_to_str.h"
 #include "main.h"
 #include "main_gui.h"
@@ -32,6 +33,8 @@ void image_info_dlg_new(image_info_dialog** ptr, image_info* img)
     GtkObject* adj;
     image_info_dialog* dl;
 
+    DMSG("image_info_dlg_new\n");
+
     int y = 0;
 
     dl = g_malloc(sizeof(image_info_dialog));
@@ -39,7 +42,7 @@ void image_info_dlg_new(image_info_dialog** ptr, image_info* img)
 
     dl->ratio = (double)img->user_width/img->user_height;
     dl->dialog = gtk_dialog_new();
-    
+
     g_signal_connect(GTK_OBJECT(dl->dialog), "destroy",
                        G_CALLBACK(image_dlg_destroy),
                        dl);
@@ -79,7 +82,7 @@ void image_info_dlg_new(image_info_dialog** ptr, image_info* img)
                        TRUE, TRUE, 0);
     gtk_container_set_border_width(GTK_CONTAINER(vbox), 10);
     gtk_widget_show(vbox);
-    
+
     tmp = gtk_label_new("Width:");
     gtk_misc_set_alignment(GTK_MISC(tmp), 0.0, 0.5);
     gtk_table_attach_defaults(GTK_TABLE(table), tmp, 0, 1, y, y+1);
@@ -239,6 +242,7 @@ void image_info_dlg_new(image_info_dialog** ptr, image_info* img)
 
 void width_update(GtkWidget* w, image_info_dialog* dl)
 {
+    DMSG("width_update\n");
     (void)w;
     int height;
     int width = atoi(gtk_entry_get_text(GTK_ENTRY(dl->width)));
@@ -263,6 +267,7 @@ void width_update(GtkWidget* w, image_info_dialog* dl)
 
 void height_update(GtkWidget* w, image_info_dialog* dl)
 {
+    DMSG("height_update\n");
     (void)w;
     int width;
     int height = atoi(gtk_entry_get_text(GTK_ENTRY(dl->height)));
@@ -321,6 +326,7 @@ void update_text(GtkLabel* label, int w, int h, int aa)
 void image_dlg_update_recommended_precision(image_info_dialog* dl,
                                             image_info* img)
 {
+    DMSG("image_dlg_update_recommended_precision\n");
     char str[MAX_DP];
     sprintf(str, "Precision (bits):\nScant minimum:%ld",
                         (long)img->pcoords->recommend);
@@ -359,6 +365,7 @@ static void image_dlg_destroy(GtkWidget* widget,
 
 void image_info_ok_cmd(GtkWidget* w, image_info_dialog* dl)
 {
+    DMSG("image_info_ok_cmd\n");
     image_info_apply_cmd(w, dl);
     gtk_widget_destroy(dl->dialog);
 }
@@ -367,6 +374,7 @@ void image_info_apply_cmd(GtkWidget* widget, image_info_dialog* dl)
 {
     (void)widget;
     int tc;
+    DMSG("image_info_apply_cmd\n");
 
     mp_prec_t precision =
         gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(dl->precision));
@@ -438,6 +446,17 @@ void do_image_info_save_dialog(image_info* img)
                         GTK_STOCK_CANCEL, GTK_RESPONSE_CANCEL,
                         GTK_STOCK_SAVE, GTK_RESPONSE_ACCEPT,
                         NULL);
+
+    const char* lud = image_info_get_last_used_dir();
+    if (lud)
+        gtk_file_chooser_set_current_folder(GTK_FILE_CHOOSER(dialog), lud);
+
+    const char* luf = image_info_get_last_used_filename();
+    if (!luf)
+        luf = "untitled.mdz";
+
+    gtk_file_chooser_set_current_name(GTK_FILE_CHOOSER(dialog), luf);
+
     gtk_file_chooser_set_do_overwrite_confirmation (
                         GTK_FILE_CHOOSER (dialog), TRUE);
 
@@ -452,14 +471,14 @@ void do_image_info_save_dialog(image_info* img)
         image_info_save_all(img, filename);
         g_free(filename);
     }
-    gtk_widget_destroy (dialog); 
+    gtk_widget_destroy (dialog);
 }
 
 
 static void file_data_toggled(GtkToggleButton* toggle, gpointer data)
 {
     (void)data;
-
+    DMSG("file_data_toggled\n");
     bool data_to_load = gtk_toggle_button_get_active(
                                 GTK_TOGGLE_BUTTON(check_button_fractal));
 
@@ -481,7 +500,7 @@ static void file_data_toggled(GtkToggleButton* toggle, gpointer data)
 int do_image_info_load_dialog(image_info* img)
 {
     int good = 0;
-
+    DMSG("do_image_info_load_dialog\n");
     GtkWidget*  frame = 0;
     GtkWidget*  hbox = 0;
     GtkWidget*  tmp = 0;
@@ -493,6 +512,10 @@ int do_image_info_load_dialog(image_info* img)
                         GTK_STOCK_CANCEL, GTK_RESPONSE_CANCEL,
                         GTK_STOCK_OPEN, GTK_RESPONSE_ACCEPT,
                         NULL);
+
+    const char* lud = image_info_get_last_used_dir();
+    if (lud)
+        gtk_file_chooser_set_current_folder(GTK_FILE_CHOOSER(dl), lud);
 
     frame = gtk_frame_new("Data to load");
     hbox = gtk_hbox_new(FALSE, 0);
@@ -538,6 +561,10 @@ int do_image_info_load_dialog(image_info* img)
         filename = gtk_file_chooser_get_filename(
                                         GTK_FILE_CHOOSER(dl));
 
+        gui_stop_rendering(img);
+
+        DMSG("rendering stopped, proceeding to load image info...\n");
+
         good = image_info_load_all(img, flags, filename);
         g_free(filename);
     }
@@ -549,6 +576,7 @@ int do_image_info_load_dialog(image_info* img)
 
 void image_info_dlg_set(image_info* img, image_info_dialog* dl)
 {
+    DMSG("image_info_dlg_set\n");
     g_signal_handler_block(G_OBJECT(dl->width), width_sig);
     gtk_spin_button_set_value(GTK_SPIN_BUTTON(dl->width),
                                               img->user_width);
@@ -559,7 +587,7 @@ void image_info_dlg_set(image_info* img, image_info_dialog* dl)
     g_signal_handler_unblock(G_OBJECT(dl->height), height_sig);
     gtk_spin_button_set_value(GTK_SPIN_BUTTON(dl->aa),  img->aa_factor);
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(dl->const_ra), TRUE);
-    update_text(GTK_LABEL(dl->text), 
+    update_text(GTK_LABEL(dl->text),
         gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(dl->width)),
         gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(dl->height)),
         gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(dl->aa)));
