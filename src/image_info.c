@@ -803,11 +803,11 @@ static void set_last_used(const char* path)
         last_used_dir = strdup(path);
         last_used_dir = dirname(last_used_dir);
     }
-    if (last_used_filename && strcmp(last_used_filename, path) != 0) {
-        free(last_used_filename);
-        last_used_filename = 0;
+    if (last_used_filename_path && strcmp(last_used_filename_path, path) != 0) {
+        free(last_used_filename_path);
+        last_used_filename_path = 0;
     }
-    if (!last_used_filename) {
+    if (!last_used_filename_path) {
         last_used_filename_path = strdup(path);
         last_used_filename = basename(last_used_filename_path);
     }
