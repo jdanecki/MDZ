@@ -1,7 +1,7 @@
 #ifndef MDZFILEIO_H
 #define MDZFILEIO_H
 
-#define FBUFLEN 4096
+#define FBUFLEN (4096*16)
 
 
 #include <stdio.h>
