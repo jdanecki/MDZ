@@ -40,6 +40,10 @@ int render_to_file(image_info* img)
 
     rth_ui_start_render(rth);
 
+    #ifndef NDEBUG
+    coords_dump(img->pcoords,"rendering this:");
+    #endif
+
     printf("calculating...\n");
 
     int linesdone = 0;

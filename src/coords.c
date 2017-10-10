@@ -126,10 +126,12 @@ coords* coords_cpy(coords* dest, const coords* src)
 void coords_dump(const coords* c, const char* msg)
 {
 #if MPFR_VERSION_MAJOR > 2 || (MPFR_VERSION_MAJOR == 2 && MPFR_VERSION_MINOR >= 4)
-    mpfr_printf("%s\nc->cx:%.Rf\tc->cy:%.Rf\tc->size:%.Rf\n",
-                msg, c->cx,  c->cy, c->width);
+    mpfr_printf("%s\nc->cx:%.Re\nc->cy:%.Re\n",
+                msg, c->cx,  c->cy);
+    mpfr_printf("c->width:%.Re\nc->height:%.Re\nc->_size:%.Re\n",
+                c->width, c->height, c->_size);
 
-    mpfr_printf("c->xmin:%.Rf\tc->xmax:%.Rf\tc->ymax:%.Rf\n",
+    mpfr_printf("c->xmin:%.Re\nc->xmax:%.Re\nc->ymax:%.Re\n",
                 c->xmin,  c->xmax, c->ymax);
 
     printf("c->precision: %ld\n", (long)c->precision);
@@ -239,6 +241,10 @@ void coords_rect_to_center(coords* c)
     /* calc width, height */
     mpfr_sub(   c->width,   c->xmax,    c->xmin,        GMP_RNDN);
     mpfr_div_d( c->height,  c->width,   c->aspect,      GMP_RNDN);
+
+    /* calc size */
+    /* c->size points to c->width or c->height, which were just updated */
+    mpfr_set(   c->_size,  *c->size,                    GMP_RNDN);
 
     /* calc ymin */
     mpfr_sub(   c->ymin,    c->ymax,    c->height,      GMP_RNDN);
