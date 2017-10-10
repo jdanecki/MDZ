@@ -241,6 +241,10 @@ void coords_rect_to_center(coords* c)
     mpfr_sub(   c->width,   c->xmax,    c->xmin,        GMP_RNDN);
     mpfr_div_d( c->height,  c->width,   c->aspect,      GMP_RNDN);
 
+    /* calc size */
+    /* c->size points to c->width or c->height, which were just updated */
+    mpfr_set(   c->_size,  *c->size,                    GMP_RNDN);
+
     /* calc ymin */
     mpfr_sub(   c->ymin,    c->ymax,    c->height,      GMP_RNDN);
 
