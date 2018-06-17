@@ -17,7 +17,7 @@ CFLAGS := $(DEFS) -O3 -fomit-frame-pointer -Winline -DNDEBUG
 #CFLAGS := $(DEFS) -ggdb -DRTH_NDEBUG
 
 
-LIBS   := -lm -lpng -lz -lgmp -lmpfr -lpthread
+LIBS   := -lm -lpng -lz -lgmp -lmpfr -lpthread -ldl -lresolv -lrt
 
 SRC    := $(wildcard *.c)
 OBJS   := $(patsubst %.c, %.o, $(SRC))
